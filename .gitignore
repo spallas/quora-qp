@@ -104,6 +104,9 @@ venv.bak/
 .mypy_cache/
 
 data/
+models/
+logs/
+res/
 .idea/
 .DS_Store/
 plots/

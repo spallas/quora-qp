@@ -1,0 +1,13 @@
+flask
+umap-learn
+hdbscan
+spacy
+nltk
+tensorflow
+xxhash
+scikit-learn
+numpy
+torch
+pandas
+Keras-Preprocessing
+pytorch-pretrained-bert
