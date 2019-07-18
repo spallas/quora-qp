@@ -13,6 +13,10 @@ from nltk.stem import WordNetLemmatizer
 from spacy.lang.en import English
 from spacy.lang.it import Italian
 
+import whoosh.index as index
+from whoosh.fields import Schema, TEXT, ID
+from whoosh.qparser import QueryParser, OrGroup
+
 from semantic_sim import SimilarityServer
 
 tokenize_it = Italian().Defaults.create_tokenizer()
@@ -56,7 +60,7 @@ class QuestionRecommendation:
         else:
             documents_matrix = []
             with open(self.questions_file) as f:
-                batch, batch_size = [], 512
+                batch, batch_size = [], 32
                 for line in f:
                     batch.append(line)
                     if len(batch) == batch_size:
@@ -98,3 +102,46 @@ class QuestionRecommendation:
         faiss.normalize_L2(sv)
         cosine_scores, keys = self.vector_index.search(sv, k)
         return keys[0]
+
+
+class TfIdfSearch:
+    """
+
+    """
+
+    _CACHED_INDEX = 'data/tfidf_index'
+
+    def __init__(self, questions_file):
+        """
+        """
+        self.questions_file = questions_file
+
+        if os.path.exists(self._CACHED_INDEX):
+            self.indx = index.open_dir(self._CACHED_INDEX)
+        else:
+            os.makedirs(self._CACHED_INDEX)
+
+            schema = Schema(key=ID(stored=True, unique=True), text=TEXT(stored=False))
+            ix = index.create_in(self._CACHED_INDEX, schema)
+            writer = ix.writer()
+            with open(self.questions_file) as f:
+                for i, row in enumerate(f):
+                    writer.add_document(key=str(i), text=row.strip())
+                writer.commit()
+            self.indx = ix
+        self.query_parser = QueryParser('text', self.indx.schema)
+        self.searcher = self.indx.searcher()
+
+    def search(self, query, k=10):
+        """
+
+        :param query:
+        :param k:
+        :return:
+        """
+        q = self.query_parser.parse(query)
+        results = self.searcher.search(q, limit=k)
+        if not results:
+            q = QueryParser('text', schema=self.indx.schema, group=OrGroup).parse(query)
+            results = self.searcher.search(q, limit=k)
+        return [int(r['key']) for r in results]
