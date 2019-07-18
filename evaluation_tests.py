@@ -3,7 +3,7 @@ import pandas as pd
 
 from question_recommend import QuestionRecommendation, TfIdfSearch
 
-TEST_QUESTIONS = 'data/_test_questions.txt'
+TEST_QUESTIONS = 'data/test_questions.txt'
 TEST_DATASET = 'data/test_dataset.txt'
 
 
@@ -14,8 +14,8 @@ def save_test_questions():
     test_questions = []
     test_dataset = []
 
-    num_test_questions = 100
-    num_dataset_questions = 200_000
+    num_test_questions = 1000
+    num_dataset_questions = 400_000
 
     for i, row in df.iterrows():
         if row['is_duplicate'] == 1 and num_test_questions != 0:

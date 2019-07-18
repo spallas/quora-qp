@@ -60,7 +60,7 @@ class QuestionRecommendation:
         else:
             documents_matrix = []
             with open(self.questions_file) as f:
-                batch, batch_size = [], 32
+                batch, batch_size = [], 128
                 for line in f:
                     batch.append(line)
                     if len(batch) == batch_size:
