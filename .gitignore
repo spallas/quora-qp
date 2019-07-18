@@ -106,7 +106,6 @@ venv.bak/
 data/
 models/
 logs/
-res/
 .idea/
 .DS_Store/
 plots/
