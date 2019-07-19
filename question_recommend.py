@@ -169,7 +169,7 @@ class MinHashSearch:
     """
 
     _CACHED_INDEX = 'data/min_hash_index.pkl'
-    _NUM_PERMUTATIONS = 512
+    _NUM_PERMUTATIONS = 300
     _THRESHOLD = 0.5
 
     def __init__(self, questions_file):
