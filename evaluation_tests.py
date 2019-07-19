@@ -42,7 +42,7 @@ def save_test_questions():
             print(f"{q}", file=f)
 
 
-def evaluate(engine):
+def evaluate(engine, k):
     num_questions = 0
     num_correct = 0
 
@@ -50,7 +50,7 @@ def evaluate(engine):
         for line in tqdm(f):
             q, dupl = line.strip().split('\t')
 
-            retrieved = engine.search(q, k=100)
+            retrieved = engine.search(q, k=k)
 
             if int(dupl) in retrieved:
                 num_correct += 1
@@ -65,5 +65,6 @@ if __name__ == '__main__':
     tf = TfIdfSearch(TEST_DATASET)
     lsh = MinHashSearch(TEST_DATASET)
     print("Loaded indices", flush=True)
-    for e in [se, tf, lsh]:
-        evaluate(e)
+    for e in [se, tf]:
+        evaluate(e, 5)
+    evaluate(lsh, 1000)
