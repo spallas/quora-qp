@@ -1,3 +1,5 @@
+tqdm
+datasketch
 whoosh
 flask
 umap-learn

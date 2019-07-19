@@ -1,4 +1,6 @@
 import os
+import pickle
+import random
 import re
 import string
 
@@ -6,6 +8,8 @@ import faiss
 import hdbscan
 import numpy as np
 import umap
+import xxhash
+from datasketch import MinHash, MinHashLSH
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -14,15 +18,27 @@ from spacy.lang.en import English
 from spacy.lang.it import Italian
 
 import whoosh.index as index
+from tqdm import tqdm
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser, OrGroup
 
 from semantic_sim import SimilarityServer
 
 tokenize_it = Italian().Defaults.create_tokenizer()
-tokenizer_en = English().Defaults.create_tokenizer()
+tokenize_en = English().Defaults.create_tokenizer()
 wnl = WordNetLemmatizer()
 punct = string.punctuation.replace('.', '').replace(',', '')
+
+
+def to_shingles(doc, k=5):
+    shingles = set()
+    doc_string = doc.lower()
+    if len(doc_string) <= k:
+        doc_string = doc + 'no_txt_' + str(xxhash.xxh64(str(random.random())).hexdigest())
+    for i in range(len(doc_string) - k + 1):
+        h = doc_string[i:i+k]
+        shingles.add(h.encode('utf8'))
+    return list(shingles)
 
 
 def search_preprocess(language):
@@ -35,7 +51,7 @@ def search_preprocess(language):
         only_print = re.sub(r'\s+', ' ',
                             re.sub(fr'([{string.punctuation}])(\S)', r'\1 \2',
                                    re.sub(r'[^ -~]+', ' ', text)))
-        tokens = tokenizer_en(only_print) if language == 'english' else tokenize_it(only_print)
+        tokens = tokenize_en(only_print) if language == 'english' else tokenize_it(only_print)
         stops = set(stopwords.words(language))
         if language == 'english':
             tokens = map(lambda w: wnl.lemmatize(str(w)), tokens)
@@ -61,7 +77,7 @@ class QuestionRecommendation:
             documents_matrix = []
             with open(self.questions_file) as f:
                 batch, batch_size = [], 128
-                for line in f:
+                for line in tqdm(f):
                     batch.append(line)
                     if len(batch) == batch_size:
                         documents_matrix.extend(self.sim_server.embed(batch))
@@ -125,7 +141,7 @@ class TfIdfSearch:
             ix = index.create_in(self._CACHED_INDEX, schema)
             writer = ix.writer()
             with open(self.questions_file) as f:
-                for i, row in enumerate(f):
+                for i, row in tqdm(enumerate(f)):
                     writer.add_document(key=str(i), text=row.strip())
                 writer.commit()
             self.indx = ix
@@ -145,3 +161,41 @@ class TfIdfSearch:
             q = QueryParser('text', schema=self.indx.schema, group=OrGroup).parse(query)
             results = self.searcher.search(q, limit=k)
         return [int(r['key']) for r in results]
+
+
+class MinHashSearch:
+    """
+
+    """
+
+    _CACHED_INDEX = 'data/min_hash_index.pkl'
+    _NUM_PERMUTATIONS = 512
+    _THRESHOLD = 0.5
+
+    def __init__(self, questions_file):
+        self.questions_file = questions_file
+
+        if os.path.exists(self._CACHED_INDEX):
+            with open(self._CACHED_INDEX, 'rb') as f:
+                self.indx = pickle.load(f)  # load the index
+        else:
+            # build the index.
+            self.indx = MinHashLSH(threshold=self._THRESHOLD,
+                                   num_perm=self._NUM_PERMUTATIONS)
+            with open(questions_file) as f:
+                for i, line in tqdm(enumerate(f)):
+                    tokens = to_shingles(line.strip())
+                    min_hash = MinHash(num_perm=self._NUM_PERMUTATIONS)
+                    for t in tokens:
+                        min_hash.update(t)
+                    self.indx.insert(i, min_hash)
+            with open(self._CACHED_INDEX, 'wb') as f:
+                pickle.dump(self.indx, f)
+
+    def search(self, query, k=10):
+        tokens = to_shingles(query)
+        m = MinHash(num_perm=self._NUM_PERMUTATIONS)
+        for t in tokens:
+            m.update(t)
+        results = self.indx.query(m)
+        return results[:k]

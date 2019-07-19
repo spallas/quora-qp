@@ -1,7 +1,8 @@
 
 import pandas as pd
+from tqdm import tqdm
 
-from question_recommend import QuestionRecommendation, TfIdfSearch
+from question_recommend import QuestionRecommendation, TfIdfSearch, MinHashSearch
 
 TEST_QUESTIONS = 'data/test_questions.txt'
 TEST_DATASET = 'data/test_dataset.txt'
@@ -41,31 +42,28 @@ def save_test_questions():
             print(f"{q}", file=f)
 
 
-def evaluate(se, t):
+def evaluate(engine):
     num_questions = 0
-    num_correct_semantic = 0
-    num_correct_tfidf = 0
+    num_correct = 0
 
     with open(TEST_QUESTIONS) as f:
-        for line in f:
+        for line in tqdm(f):
             q, dupl = line.strip().split('\t')
 
-            retrieved_se = se.search(q, k=3)
-            retrieved_t = t.search(q, k=3)
+            retrieved = engine.search(q, k=100)
 
-            if int(dupl) in retrieved_se:
-                num_correct_semantic += 1
-            if int(dupl) in retrieved_t:
-                num_correct_tfidf += 1
+            if int(dupl) in retrieved:
+                num_correct += 1
             num_questions += 1
 
-    print(f"Semantic: {100 * num_correct_semantic/num_questions} %")
-    print(f"TF-IDF: {100 * num_correct_tfidf/num_questions} %")
+    print(f"Metric: {100 * num_correct/num_questions} %")
 
 
 if __name__ == '__main__':
 
-    se = QuestionRecommendation('data/test_dataset.txt')
-    t = TfIdfSearch('data/test_dataset.txt')
-
-    evaluate(se, t)
+    se = QuestionRecommendation(TEST_DATASET)
+    tf = TfIdfSearch(TEST_DATASET)
+    lsh = MinHashSearch(TEST_DATASET)
+    print("Loaded indices", flush=True)
+    for e in [se, tf, lsh]:
+        evaluate(e)
