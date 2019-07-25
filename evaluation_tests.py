@@ -44,6 +44,9 @@ def save_test_questions():
 
 def evaluate(engine, k):
     num_questions = 0
+    num_correct_3 = 0
+    num_correct_5 = 0
+    num_correct_10 = 0
     num_correct = 0
 
     with open(TEST_QUESTIONS) as f:
@@ -52,11 +55,20 @@ def evaluate(engine, k):
 
             retrieved = engine.search(q, k=k)
 
-            if int(dupl) in retrieved:
+            if int(dupl) in retrieved[:10]:
+                num_correct_10 += 1
+            if int(dupl) in retrieved[:5]:
+                num_correct_5 += 1
+            if int(dupl) in retrieved[:3]:
+                num_correct_3 += 1
+            if int(dupl) in retrieved[:1]:
                 num_correct += 1
             num_questions += 1
 
-    print(f"Metric: {100 * num_correct/num_questions} %")
+    print(f"Detection @1: {100 * num_correct/num_questions} %")
+    print(f"Detection @3: {100 * num_correct_3/num_questions} %")
+    print(f"Detection @5: {100 * num_correct_5/num_questions} %")
+    print(f"Detection @10: {100 * num_correct_10/num_questions} %")
 
 
 if __name__ == '__main__':
@@ -66,5 +78,5 @@ if __name__ == '__main__':
     lsh = MinHashSearch(TEST_DATASET)
     print("Loaded indices", flush=True)
     for e in [se, tf]:
-        evaluate(e, 5)
+        evaluate(e, 20)
     evaluate(lsh, 1000)
