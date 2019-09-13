@@ -22,7 +22,7 @@ from tqdm import tqdm
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser, OrGroup
 
-from semantic_sim import SimilarityServer
+from semantic_sim import SimServer
 
 tokenize_it = Italian().Defaults.create_tokenizer()
 tokenize_en = English().Defaults.create_tokenizer()
@@ -67,9 +67,10 @@ class QuestionRecommendation:
 
     _CACHED_VECTORS = 'data/questions.faiss'
 
-    def __init__(self, questions_file):
+    def __init__(self, questions_file, model):
         self.questions_file = questions_file
-        self.sim_server = SimilarityServer()
+        self.sim_server = SimServer(model)
+        self._CACHED_VECTORS = self._CACHED_VECTORS + '.' + str(model)
         p = search_preprocess('english')
         if os.path.exists(self._CACHED_VECTORS):
             self.vector_index = faiss.read_index(self._CACHED_VECTORS)

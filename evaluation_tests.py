@@ -3,6 +3,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from question_recommend import QuestionRecommendation, TfIdfSearch, MinHashSearch
+from semantic_sim import SimServer
 
 TEST_QUESTIONS = 'data/test_questions.txt'
 TEST_DATASET = 'data/test_dataset.txt'
@@ -73,10 +74,13 @@ def evaluate(engine, k):
 
 if __name__ == '__main__':
 
-    se = QuestionRecommendation(TEST_DATASET)
+    se = QuestionRecommendation(TEST_DATASET, SimServer.UNIV_SENT_ENCODER)
+    se1 = QuestionRecommendation(TEST_DATASET, SimServer.USE_QA)
+    se2 = QuestionRecommendation(TEST_DATASET, SimServer.USE_MULTILINGUAL)
+    se3 = QuestionRecommendation(TEST_DATASET, SimServer.USE_WITH_DAN)
     tf = TfIdfSearch(TEST_DATASET)
     lsh = MinHashSearch(TEST_DATASET)
     print("Loaded indices", flush=True)
-    for e in [se, tf]:
+    for e in [se, se1, se2, se3, tf]:
         evaluate(e, 20)
     evaluate(lsh, 1000)

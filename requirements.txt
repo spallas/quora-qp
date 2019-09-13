@@ -13,4 +13,6 @@ numpy
 torch
 pandas
 Keras-Preprocessing
-pytorch-pretrained-bert
+pytorch-transformers
+sentencepiece
+tf-sentencepiece
