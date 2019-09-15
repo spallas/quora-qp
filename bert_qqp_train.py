@@ -44,8 +44,9 @@ class QQPLoader:
             bt.append(torch.tensor(types))
             by.append(torch.tensor(y))
 
-        bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=self.tok.encode('[PAD]'))
+        bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=0)
         bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1)
+        by = torch.stack(by)
         return bx.to(self.device), bt.to(self.device), by.to(self.device)
 
 
@@ -64,6 +65,7 @@ class PretrainedLMForQQP:
         self.batch_size = 64
         self.log_interval = 1000
         self.is_training = is_training
+        self._plot_server = None
 
         self.checkpoint_path = checkpoint_path
         self.best_model_path = checkpoint_path + '.best'
@@ -103,7 +105,7 @@ class PretrainedLMForQQP:
             for step, (b_x, b_t, b_y) in enumerate(self.train_loader, self.last_step):
                 self.model.zero_grad()
                 b_m = (b_x != 0)
-                loss = self.model(b_x, b_t, b_m, b_y)
+                loss, _ = self.model(b_x, b_t, b_m, b_y)
                 loss /= b_m.float().sum()
                 loss.backward()
                 self._log(step, loss, epoch)
@@ -116,12 +118,11 @@ class PretrainedLMForQQP:
         with torch.no_grad():
             pred, true = [], []
             for step, (b_x, b_t, b_y) in enumerate(self.test_loader):
-                logits = self.model(b_x, b_t, (b_x != 0))
-                logits = logits.detach().cpu().numpy()
+                outputs = self.model(b_x, b_t, (b_x != 0))
+                logits = outputs[0].to('cpu').numpy()
                 b_labels = b_y.to('cpu').tolist()
                 pred += np.argmax(logits, axis=-1).tolist()
                 true += b_labels
-                print("\rBatch:", step, end='')
         self.model.train()
         print()
         f1 = f1_score(true, pred, average="micro")
