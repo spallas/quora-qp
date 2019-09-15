@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -62,7 +63,7 @@ class PretrainedLMForQQP:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.learning_rate = 5e-5
         self.num_epochs = 6
-        self.batch_size = 64
+        self.batch_size = 32
         self.log_interval = 1000
         self.is_training = is_training
         self._plot_server = None
@@ -79,24 +80,6 @@ class PretrainedLMForQQP:
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self._maybe_load_checkpoint()
         self.model.to(self.device)
-
-    def _maybe_load_checkpoint(self):
-        if os.path.exists(self.checkpoint_path):
-            checkpoint = torch.load(self.checkpoint_path)
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.last_epoch = checkpoint['epoch']
-            self.last_step = checkpoint['last_step']
-            self.min_loss = checkpoint['min_loss']
-            self.best_f1_micro = checkpoint['f1']
-            print(f"Loaded checkpoint from: {self.checkpoint_path}")
-            if self.last_epoch >= self.num_epochs:
-                print("Training finished for this checkpoint")
-        else:
-            self.last_epoch = 0
-            self.last_step = 0
-            self.min_loss = 1e3
-            self.best_f1_micro = 0.0
 
     def train(self):
         for epoch in range(self.last_epoch + 1, self.num_epochs):
@@ -130,9 +113,12 @@ class PretrainedLMForQQP:
             self._save_best(f1)
         with open(self.eval_report, 'w') as fo:
             print(classification_report(true, pred, digits=3), file=fo)
-            print(f'Accuracy: {accuracy_score(true, pred)}\n')
+            print(f'Accuracy: {accuracy_score(true, pred)}')
             print(f'F1: {f1}\n')
         return f1
+
+    def predict(self, query: str, questions: List[str]):
+        pass
 
     def _log(self, step, loss, epoch_i):
         if step % self.log_interval == 0:
@@ -152,6 +138,13 @@ class PretrainedLMForQQP:
                 'f1': self.best_f1_micro
             }, self.best_model_path)
 
+    def _load_best(self):
+        if os.path.exists(self.best_model_path):
+            checkpoint = torch.load(self.best_model_path, map_location=str(self.device))
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            raise ValueError(f"Could not find any best model checkpoint: {self.best_model_path}")
+
     def _maybe_checkpoint(self, loss, epoch_i):
         current_loss = loss.item()
         if current_loss < self.min_loss:
@@ -166,6 +159,24 @@ class PretrainedLMForQQP:
                 'f1': self.best_f1_micro
             }, self.checkpoint_path)
 
+    def _maybe_load_checkpoint(self):
+        if os.path.exists(self.checkpoint_path):
+            checkpoint = torch.load(self.checkpoint_path)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.last_epoch = checkpoint['epoch']
+            self.last_step = checkpoint['last_step']
+            self.min_loss = checkpoint['min_loss']
+            self.best_f1_micro = checkpoint['f1']
+            print(f"Loaded checkpoint from: {self.checkpoint_path}")
+            if self.last_epoch >= self.num_epochs:
+                print("Training finished for this checkpoint")
+        else:
+            self.last_epoch = 0
+            self.last_step = 0
+            self.min_loss = 1e3
+            self.best_f1_micro = 0.0
+
     def _plot(self, name, value, step):
         if not self._plot_server:
             self._plot_server = SummaryWriter(log_dir='logs')
@@ -175,7 +186,7 @@ class PretrainedLMForQQP:
     def _gpu_mem_info():
         if torch.cuda.is_available():  # check if memory is leaking
             print(f'Allocated GPU memory: '
-                  f'{torch.cuda.memory_allocated() / 1_000_000} MB', end='')
+                  f'{torch.cuda.memory_allocated() / 1_000_000} MB')
 
 
 def main():
