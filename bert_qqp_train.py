@@ -35,6 +35,7 @@ class QQPLoader:
             except StopIteration:
                 self.stop_flag = True
                 break
+            row = row[1]
             a = self.tok.encode('[CLS]' + str(row['question1']) + '[SEP]')
             b = self.tok.encode(str(row['question2']) + '[SEP]')
             types = [0] * len(a) + [1] * len(b)
@@ -177,7 +178,10 @@ class PretrainedLMForQQP:
 
 
 def main():
-    pass
+    t = PretrainedLMForQQP(train_path='data/quora-question-pairs/train.csv',
+                           test_path='data/quora-question-pairs/test.csv')
+
+    t.train()
 
 
 if __name__ == '__main__':
