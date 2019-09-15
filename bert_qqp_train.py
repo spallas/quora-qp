@@ -63,7 +63,7 @@ class PretrainedLMForQQP:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.learning_rate = 5e-5
         self.num_epochs = 6
-        self.batch_size = 32
+        self.batch_size = 16
         self.log_interval = 1000
         self.is_training = is_training
         self._plot_server = None
@@ -107,7 +107,6 @@ class PretrainedLMForQQP:
                 pred += np.argmax(logits, axis=-1).tolist()
                 true += b_labels
         self.model.train()
-        print()
         f1 = f1_score(true, pred, average="micro")
         if self.is_training:
             self._save_best(f1)
