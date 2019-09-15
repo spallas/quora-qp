@@ -44,7 +44,7 @@ class QQPLoader:
 
         bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=self.tok.encode('[PAD]'))
         bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1)
-        return bx, bt, by
+        return bx.to(self.device), bt.to(self.device), by.to(self.device)
 
 
 class PretrainedLMForQQP:
@@ -56,6 +56,7 @@ class PretrainedLMForQQP:
                  train_path='train.csv',
                  test_path='test.csv'):
 
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.learning_rate = 5e-5
         self.num_epochs = 6
         self.batch_size = 64
@@ -67,11 +68,10 @@ class PretrainedLMForQQP:
         self.eval_report = eval_report_path
         self.train_data_path = train_path
         self.test_data_path = test_path
-        self.train_loader = QQPLoader(self.train_data_path, self.batch_size)
-        self.test_loader = QQPLoader(self.test_data_path, self.batch_size)
+        self.train_loader = QQPLoader(self.device, self.train_data_path, self.batch_size)
+        self.test_loader = QQPLoader(self.device, self.test_data_path, self.batch_size)
 
         self.model = BertForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self._maybe_load_checkpoint()
         self.model.to(self.device)
