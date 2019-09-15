@@ -3,151 +3,181 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-from keras_preprocessing.sequence import pad_sequences
 from pytorch_transformers import BertTokenizer, BertForSequenceClassification
 from sklearn.metrics import classification_report, f1_score, accuracy_score
-from torch.optim import Adam
+from torch import optim, nn
+from torch.utils.tensorboard import SummaryWriter
 
 torch.manual_seed(42)
 
-train_data = 'data/quora-question-pairs/xsmall_train.csv'
-# test_data = 'data/quora-question-pairs/xsmall_train.csv'
-test_data = 'data/quora-question-pairs/small_test.csv'
 
-batch_size = 16
-num_epochs = 6
+class QQPLoader:
 
-checkpoint_path = 'logs/checkpoint.pth'  # 'drive/My Drive/dm/logs/checkpoint.pth'
-eval_report = 'logs/report.txt'  # 'drive/My Drive/dm/logs/eval_report.txt'
+    def __init__(self, device, data_path, batch_size=32):
+        self.device = device
+        self.df = pd.read_csv(data_path, index_col=0)
+        self.batch_size = batch_size
+        self.tok: BertTokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=False)
+        self.stop_flag = False
 
-ON_CUDA = torch.cuda.is_available()
+    def __iter__(self):
+        self.pandas_iterator = self.df.iterrows()
+        self.stop_flag = False
 
-tok = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=False)
+    def __next__(self):
+        if self.stop_flag:
+            raise StopIteration
+        bx, bt, by = [], [], []
+        for i in range(self.batch_size):
+            try:
+                row = next(self.pandas_iterator)
+            except StopIteration:
+                self.stop_flag = True
+                break
+            a = self.tok.encode('[CLS]' + str(row['question1']) + '[SEP]')
+            b = self.tok.encode(str(row['question2']) + '[SEP]')
+            types = [0] * len(a) + [1] * len(b)
+            y = int(row['is_duplicate'])
+            bx.append(torch.tensor(a + b))
+            bt.append(torch.tensor(types))
+            by.append(torch.tensor(y))
+
+        bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=self.tok.encode('[PAD]'))
+        bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1)
+        return bx, bt, by
 
 
 class PretrainedLMForQQP:
 
-    def __init__(self):
+    def __init__(self,
+                 checkpoint_path='logs/checkpoint.pth',
+                 eval_report_path='logs/report.txt',
+                 is_training=True,
+                 train_path='train.csv',
+                 test_path='test.csv'):
+
+        self.learning_rate = 5e-5
+        self.num_epochs = 6
+        self.batch_size = 64
+        self.log_interval = 1000
+        self.is_training = is_training
+
+        self.checkpoint_path = checkpoint_path
+        self.best_model_path = checkpoint_path + '.best'
+        self.eval_report = eval_report_path
+        self.train_data_path = train_path
+        self.test_data_path = test_path
+        self.train_loader = QQPLoader(self.train_data_path, self.batch_size)
+        self.test_loader = QQPLoader(self.test_data_path, self.batch_size)
 
         self.model = BertForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self._maybe_load_checkpoint()
+        self.model.to(self.device)
 
-        if ON_CUDA:
-            self.model.to('cuda')
-
-        param_optimizer = list(self.model.named_parameters())
-        no_decay = ['bias', 'gamma', 'beta']
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
-             'weight_decay_rate': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
-             'weight_decay_rate': 0.0}]
-
-        self.optimizer = Adam(optimizer_grouped_parameters, lr=5e-5)
-
-        checkpoint = {}
-        if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path) if ON_CUDA else torch.load(checkpoint_path, map_location='cpu')
+    def _maybe_load_checkpoint(self):
+        if os.path.exists(self.checkpoint_path):
+            checkpoint = torch.load(self.checkpoint_path)
             self.model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.last_epoch = checkpoint['epoch']
+            self.last_step = checkpoint['last_step']
             self.min_loss = checkpoint['min_loss']
+            self.best_f1_micro = checkpoint['f1']
+            print(f"Loaded checkpoint from: {self.checkpoint_path}")
+            if self.last_epoch >= self.num_epochs:
+                print("Training finished for this checkpoint")
         else:
             self.last_epoch = 0
+            self.last_step = 0
             self.min_loss = 1e3
+            self.best_f1_micro = 0.0
 
     def train(self):
-        for epoch in range(self.last_epoch + 1, num_epochs):
+        for epoch in range(self.last_epoch + 1, self.num_epochs):
             print(f'Epoch: {epoch}')
-            train_iter = self._batch_iter(self,_load_pairs(train_data))
-            self.model.train()
-            for step, batch in enumerate(train_iter):
+            step = 0
+            for step, (b_x, b_t, b_y) in enumerate(self.train_loader, self.last_step):
                 self.model.zero_grad()
-                if ON_CUDA:
-                    batch = tuple(t.to('cuda') for t in batch)
-                b_input_ids, b_input_mask, b_labels, b_types = batch
-                loss = self.model(b_input_ids, b_types, b_input_mask, b_labels)
-                loss /= b_input_mask.float().sum()
+                b_m = (b_x != 0)
+                loss = self.model(b_x, b_t, b_m, b_y)
+                loss /= b_m.float().sum()
                 loss.backward()
-                if step % 200 == 0:
-                    print(f'{loss.item():.4f}')
-                    # possibly save progress
-                    current_loss = loss.item()
-                    if current_loss < self.min_loss:
-                        min_loss = current_loss
-                        torch.save({
-                            'epoch': epoch,
-                            'model_state_dict': self.model.state_dict(),
-                            'optimizer_state_dict': self.optimizer.state_dict(),
-                            'current_loss': current_loss,
-                            'min_loss': min_loss,
-                        }, checkpoint_path)
-                torch.nn.utils.clip_grad_norm_(parameters=self.model.parameters(), max_norm=1.0)
+                self._log(step, loss, epoch)
                 self.optimizer.step()
+            self.last_step += step
 
     def test(self):
         print('Evaluation')
-        test_iter = self._batch_iter(self._load_pairs(test_data))
         self.model.eval()
         with torch.no_grad():
             pred, true = [], []
-            for i, eval_batch in enumerate(test_iter):
-                if ON_CUDA:
-                    eval_batch = tuple(t.to('cuda') for t in eval_batch)
-                b_input_ids, b_input_mask, b_labels, b_types = eval_batch
-                logits = self.model(b_input_ids, b_types, b_input_mask)
+            for step, (b_x, b_t, b_y) in enumerate(self.test_loader):
+                logits = self.model(b_x, b_t, (b_x != 0))
                 logits = logits.detach().cpu().numpy()
-                b_labels = b_labels.to('cpu').tolist()
+                b_labels = b_y.to('cpu').tolist()
                 pred += np.argmax(logits, axis=-1).tolist()
                 true += b_labels
-                print("\rBatch:", i, end='')
-            print()
-        with open(eval_report, 'w') as fo:
+                print("\rBatch:", step, end='')
+        self.model.train()
+        print()
+        f1 = f1_score(true, pred, average="micro")
+        if self.is_training:
+            self._save_best(f1)
+        with open(self.eval_report, 'w') as fo:
             print(classification_report(true, pred, digits=3), file=fo)
             print(f'Accuracy: {accuracy_score(true, pred)}\n')
-            print(f'F1: {f1_score(true, pred, average="micro")}\n')
+            print(f'F1: {f1}\n')
+        return f1
 
-    def _load_pairs(self, data_path):
-        df = pd.read_csv(data_path, index_col=0)
-        examples = []
-        num_duplicates = 0
-        for i, row in df.iterrows():
-            q1_tokens = tok.tokenize(str(row['question1']))
-            q2_tokens = tok.tokenize(str(row['question2']))
-            input_tokens = ['[CLS]'] + q1_tokens + ['[SEP]'] + q2_tokens + ['[SEP]']
-            sent_types = ([0] * (len(q1_tokens) + 2)) + ([1] * (len(q2_tokens) + 1))
-            label = int(row['is_duplicate'])
-            if label == 1:
-                num_duplicates += 1
-            examples.append((tok.convert_tokens_to_ids(input_tokens), sent_types, label))
-            print(f'\r{len(examples)}', end='')
-        print()
-        print(f"Positive examples: {num_duplicates}, {num_duplicates * 100 / len(examples):.3f}% of total")
-        return examples
+    def _log(self, step, loss, epoch_i):
+        if step % self.log_interval == 0:
+            print(f'\rLoss: {loss.item():.4f} ', end='')
+            self._plot('Train loss', loss.item(), step)
+            self._gpu_mem_info()
+            f1 = self.test()
+            self._maybe_checkpoint(loss, epoch_i)
+            self._plot('Dev F1', f1, step)
+            self.model.train()  # return to train mode after evaluation
 
-    def _batch_iter(self, examples):
+    def _save_best(self, f1):
+        if f1 > self.best_f1_micro:
+            self.best_f1_micro = f1
+            torch.save({
+                'model_state_dict': self.model.state_dict(),
+                'f1': self.best_f1_micro
+            }, self.best_model_path)
 
-        def emit(batch):
-            b = {k: torch.LongTensor(pad_sequences(v, padding='post', truncating='post'))
-                 for k, v in batch.items() if k != 'seq_tag'}
-            b['seq_tag'] = batch['seq_tag']
-            yield tuple(b[k] for k in sorted(b))
+    def _maybe_checkpoint(self, loss, epoch_i):
+        current_loss = loss.item()
+        if current_loss < self.min_loss:
+            min_loss = current_loss
+            torch.save({
+                'epoch': epoch_i,
+                'last_step': self.last_step,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'current_loss': current_loss,
+                'min_loss': min_loss,
+                'f1': self.best_f1_micro
+            }, self.checkpoint_path)
 
-        batch = {'ids_words': [], 'mask': [], 'seq_tag': [], 'types': []}
-        for example in examples:
-            ids, types, label = example
-            batch['ids_words'].append(ids)
-            batch['mask'].append([1] * len(ids))
-            batch['seq_tag'].append(label)
-            batch['types'].append(types)
-            if len(batch['ids_words']) == batch_size:
-                emit(batch)
-                batch = {'ids_words': [], 'mask': [], 'seq_tag': [], 'types': []}
-        if len(batch['ids_words']) != 0:
-            emit(batch)
+    def _plot(self, name, value, step):
+        if not self._plot_server:
+            self._plot_server = SummaryWriter(log_dir='logs')
+        self._plot_server.add_scalar(name, value, step)
+
+    @staticmethod
+    def _gpu_mem_info():
+        if torch.cuda.is_available():  # check if memory is leaking
+            print(f'Allocated GPU memory: '
+                  f'{torch.cuda.memory_allocated() / 1_000_000} MB', end='')
 
 
 def main():
     pass
+
 
 if __name__ == '__main__':
     main()

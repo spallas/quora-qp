@@ -4,6 +4,8 @@ from tqdm import tqdm
 
 from question_recommend import QuestionRecommendation, TfIdfSearch, MinHashSearch
 from semantic_sim import SimServer
+import tf_sentencepiece
+
 
 TEST_QUESTIONS = 'data/test_questions.txt'
 TEST_DATASET = 'data/test_dataset.txt'
@@ -81,6 +83,14 @@ if __name__ == '__main__':
     tf = TfIdfSearch(TEST_DATASET)
     lsh = MinHashSearch(TEST_DATASET)
     print("Loaded indices", flush=True)
-    for e in [se, se1, se2, se3, tf]:
-        evaluate(e, 20)
+    print("Standard USE: ")
+    evaluate(se, 20)
+    print("USE per Question Answering: ")
+    evaluate(se1, 20)
+    print("USE advanced multilingual: ")
+    evaluate(se2, 20)
+    print("Standard USE with DAN network: ")
+    evaluate(se3, 20)
+    print("TF-IDF based search : ")
+    evaluate(tf, 20)
     evaluate(lsh, 1000)

@@ -12,7 +12,7 @@ USE_EMBED_DIM = 512
 
 def embed_use(module):
     with tf.Graph().as_default():
-        sentences = tf.placeholder(tf.string)
+        sentences = tf.compat.v1.placeholder(tf.string)
         embed = hub.Module(module)
         embeddings = embed(sentences)
         session = tf.train.MonitoredSession()
@@ -37,9 +37,9 @@ def embed_use_multilingual(module):
 class SimServer:
 
     # models
-    UNIV_SENT_ENCODER = 2
-    USE_WITH_DAN = 1
     USE_MULTILINGUAL = 0
+    USE_WITH_DAN = 1
+    UNIV_SENT_ENCODER = 2
     USE_QA = 3
 
     def __init__(self, model=0, win_size=None):
@@ -62,7 +62,7 @@ class SimServer:
     def embed_use_qa(tfhub_path=USE_QA_URL):
 
         def question_embed(question_text):
-            return session.run(question_embedding, {question: [question_text]})['outputs']
+            return session.run(question_embedding, {question: question_text})['outputs']
 
         def answers_embed(answers, contexts):
             return session.run(response_embedding, {
@@ -73,9 +73,9 @@ class SimServer:
         g = tf.Graph()
         with g.as_default():
             module = hub.Module(tfhub_path)
-            question = tf.placeholder(dtype=tf.string, shape=[None])
-            response = tf.placeholder(dtype=tf.string, shape=[None])
-            response_context = tf.placeholder(dtype=tf.string, shape=[None])
+            question = tf.compat.v1.placeholder(dtype=tf.string, shape=[None])
+            response = tf.compat.v1.placeholder(dtype=tf.string, shape=[None])
+            response_context = tf.compat.v1.placeholder(dtype=tf.string, shape=[None])
             question_embedding = module(question, signature="question_encoder", as_dict=True)
             response_embedding = module(
                 inputs={
@@ -83,10 +83,10 @@ class SimServer:
                     "context": response_context
                 },
                 signature="response_encoder", as_dict=True)
-            init_op = tf.group([tf.global_variables_initializer(), tf.tables_initializer()])
+            init_op = tf.group([tf.compat.v1.global_variables_initializer(), tf.compat.v1.tables_initializer()])
         g.finalize()
         # Initialize session.
-        session = tf.Session(graph=g)
+        session = tf.compat.v1.Session(graph=g)
         session.run(init_op)
         return question_embed, answers_embed
 
