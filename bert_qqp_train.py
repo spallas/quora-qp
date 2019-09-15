@@ -23,6 +23,7 @@ class QQPLoader:
     def __iter__(self):
         self.pandas_iterator = self.df.iterrows()
         self.stop_flag = False
+        return self
 
     def __next__(self):
         if self.stop_flag:
