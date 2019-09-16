@@ -15,7 +15,7 @@ show how more advanced techniques with stronger language understanding
 capabilities manage to yield better results while maintaining acceptable 
 speeds.
 
-## Usage
+## Usage
 
 The class `PretrainedLMForQQP` is the base for training the duplicate question 
 network.
