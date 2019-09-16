@@ -247,12 +247,6 @@ def evaluate_bert_qqp(test_dataset: str,
             q, dupl = line.strip().split('\t')
             retrieved = model.retrieve(q, test_dataset)
 
-            # print(retrieved[:50])
-            # if dupl in retrieved:
-            #     print(f"True, {retrieved.index(dupl)}")
-            # else:
-            #     print(False)
-
             if int(dupl) in retrieved[:10]:
                 num_correct_10 += 1
             if int(dupl) in retrieved[:5]:

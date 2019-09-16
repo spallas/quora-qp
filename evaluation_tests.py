@@ -77,7 +77,7 @@ def save_bert_questions():
             print(f"{q}", file=f)
 
 
-def evaluate(engine, k):
+def evaluate(engine, k, limit=None):
     num_questions = 0
     num_correct_3 = 0
     num_correct_5 = 0
@@ -90,7 +90,7 @@ def evaluate(engine, k):
 
             retrieved = engine.search(q, k=k)
 
-            if int(dupl) in retrieved[:10]:
+            if int(dupl) in retrieved[:1000]:
                 num_correct_10 += 1
             if int(dupl) in retrieved[:5]:
                 num_correct_5 += 1
@@ -99,8 +99,10 @@ def evaluate(engine, k):
             if int(dupl) in retrieved[:1]:
                 num_correct += 1
             num_questions += 1
+            if num_questions == limit:
+                break
 
-    print(f"Detection @1: {100 * num_correct/num_questions} %")
+    print(f"\nDetection @1: {100 * num_correct/num_questions} %")
     print(f"Detection @3: {100 * num_correct_3/num_questions} %")
     print(f"Detection @5: {100 * num_correct_5/num_questions} %")
     print(f"Detection @10: {100 * num_correct_10/num_questions} %")
@@ -124,7 +126,7 @@ if __name__ == '__main__':
     print("Standard USE with DAN network: ")
     evaluate(se3, 20)
     print("TF-IDF based search : ")
-    evaluate(tf, 20)
+    evaluate(tf, 20, limit=500)
     print("LSH based search : ")
     evaluate(lsh, 1000)
     print("BERT model based search: ")
