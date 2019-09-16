@@ -2,6 +2,7 @@
 import pandas as pd
 from tqdm import tqdm
 
+from bert_qqp_train import PretrainedLMForQQP
 from question_recommend import QuestionRecommendation, TfIdfSearch, MinHashSearch
 from semantic_sim import SimServer
 import tf_sentencepiece
@@ -43,6 +44,37 @@ def save_test_questions():
     with open(TEST_DATASET, 'w') as f:
         for q in test_dataset:
             print(f"{q}", file=f)
+
+
+def evaluate_bert_qqp(test_dataset: str):
+    num_questions = 0
+    num_correct_3 = 0
+    num_correct_5 = 0
+    num_correct_10 = 0
+    num_correct = 0
+
+    t = PretrainedLMForQQP(train_path='data/quora-question-pairs/train.csv',
+                           test_path='data/quora-question-pairs/test.csv')
+
+    with open(TEST_QUESTIONS) as f:
+        for line in tqdm(f):
+            q, dupl = line.strip().split('\t')
+            retrieved = t.retrieve(q, test_dataset)
+
+            if int(dupl) in retrieved[:10]:
+                num_correct_10 += 1
+            if int(dupl) in retrieved[:5]:
+                num_correct_5 += 1
+            if int(dupl) in retrieved[:3]:
+                num_correct_3 += 1
+            if int(dupl) in retrieved[:1]:
+                num_correct += 1
+            num_questions += 1
+
+    print(f"Detection @1: {100 * num_correct / num_questions} %")
+    print(f"Detection @3: {100 * num_correct_3 / num_questions} %")
+    print(f"Detection @5: {100 * num_correct_5 / num_questions} %")
+    print(f"Detection @10: {100 * num_correct_10 / num_questions} %")
 
 
 def evaluate(engine, k):
@@ -93,4 +125,7 @@ if __name__ == '__main__':
     evaluate(se3, 20)
     print("TF-IDF based search : ")
     evaluate(tf, 20)
+    print("LSH based search : ")
     evaluate(lsh, 1000)
+    print("BERT model based search: ")
+    # evaluate_bert_qqp(TEST_DATASET)

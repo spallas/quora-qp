@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from pytorch_transformers import BertTokenizer, BertForSequenceClassification
 from sklearn.metrics import classification_report, f1_score, accuracy_score
+from sklearn.utils.extmath import softmax
 from torch import optim, nn
 from torch.utils.tensorboard import SummaryWriter
 
@@ -58,12 +59,13 @@ class PretrainedLMForQQP:
                  eval_report_path='logs/report.txt',
                  is_training=True,
                  train_path='train.csv',
-                 test_path='test.csv'):
+                 test_path='test.csv',
+                 batch_size=16):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.learning_rate = 5e-5
         self.num_epochs = 6
-        self.batch_size = 16
+        self.batch_size = batch_size
         self.log_interval = 1000
         self.is_training = is_training
         self._plot_server = None
@@ -116,8 +118,38 @@ class PretrainedLMForQQP:
             print(f'F1: {f1}\n')
         return f1
 
-    def predict(self, query: str, questions: List[str]):
-        pass
+    def retrieve(self, query: str, data_file: str = None):
+
+        def get_batch_scores(bx, bt):
+            with torch.no_grad():
+                bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=0)
+                bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1)
+                outputs = self.model(bx, bt, (bx != 0))
+                logits = outputs[0].to('cpu').numpy()
+                b_scores = softmax(logits)
+                scores.extend(b_scores[:, 1].tolist())
+
+        tok = self.train_loader.tok
+        scores = []
+        a = tok.encode('[CLS] ' + query + ' [SEP]')
+        b_x, b_t = [], []
+        self._load_best()
+        self.model.eval()
+        with open(data_file) as f:
+            for line in f:
+                candidate = line.strip()
+                b = tok.encode(candidate + ' [SEP]')
+                types = [0] * len(a) + [1] * len(b)
+                b_x.append(torch.tensor(a + b))
+                b_t.append(torch.tensor(types))
+                if len(b_x) == self.batch_size:
+                    get_batch_scores(b_x, b_t)
+                    b_x, b_t = [], []
+            if len(b_x) > 0:
+                get_batch_scores(b_x, b_t)
+        ranking = zip(range(len(scores)), scores)
+        ranking = sorted(ranking, key=lambda x: x[1], reverse=True)
+        return [x[1] for x in ranking]
 
     def _log(self, step, loss, epoch_i):
         if step % self.log_interval == 0:
