@@ -46,7 +46,7 @@ def save_test_questions():
             print(f"{q}", file=f)
 
 
-def evaluate_bert_qqp(test_dataset: str):
+def evaluate_bert_qqp(test_dataset: str, batch_size=128):
     num_questions = 0
     num_correct_3 = 0
     num_correct_5 = 0
@@ -54,7 +54,8 @@ def evaluate_bert_qqp(test_dataset: str):
     num_correct = 0
 
     t = PretrainedLMForQQP(train_path='data/quora-question-pairs/train.csv',
-                           test_path='data/quora-question-pairs/test.csv')
+                           test_path='data/quora-question-pairs/test.csv',
+                           batch_size=batch_size)
 
     with open(TEST_QUESTIONS) as f:
         for line in tqdm(f):
