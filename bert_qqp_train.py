@@ -222,15 +222,28 @@ class PretrainedLMForQQP:
 
 def evaluate_bert_qqp(test_dataset: str,
                       test_questions: str,
-                      model: PretrainedLMForQQP):
+                      model: PretrainedLMForQQP,
+                      cache_file: str = None):
     num_questions = 0
     num_correct_3 = 0
     num_correct_5 = 0
     num_correct_10 = 0
     num_correct = 0
+    last_step = 0
 
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
+            line0 = next(f)
+            last_step = eval(line0.strip())
+            line1 = next(f)
+            num_questions, num_correct_3, \
+                num_correct_5, num_correct_10, num_correct = eval(line1)
+
+    step = 0
     with open(test_questions) as f:
         for line in tqdm(f):
+            if step < last_step:
+                continue
             q, dupl = line.strip().split('\t')
             retrieved = model.retrieve(q, test_dataset)
 
@@ -244,10 +257,18 @@ def evaluate_bert_qqp(test_dataset: str,
                 num_correct += 1
             num_questions += 1
 
-    print(f"Detection @1: {100 * num_correct / num_questions} %")
-    print(f"Detection @3: {100 * num_correct_3 / num_questions} %")
-    print(f"Detection @5: {100 * num_correct_5 / num_questions} %")
-    print(f"Detection @10: {100 * num_correct_10 / num_questions} %")
+            step += 1
+            last_step = step
+            if last_step % 10 == 0:
+                with open(cache_file, 'w') as f:
+                    print(last_step, file=f)
+                    print([num_questions, num_correct_3, num_correct_5, num_correct_10, num_correct],
+                          file=f)
+
+                print(f"Detection @1: {100 * num_correct / num_questions} %")
+                print(f"Detection @3: {100 * num_correct_3 / num_questions} %")
+                print(f"Detection @5: {100 * num_correct_5 / num_questions} %")
+                print(f"Detection @10: {100 * num_correct_10 / num_questions} %")
 
 
 def main():
