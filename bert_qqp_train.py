@@ -9,6 +9,7 @@ from sklearn.metrics import classification_report, f1_score, accuracy_score
 from sklearn.utils.extmath import softmax
 from torch import optim, nn
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 torch.manual_seed(42)
 
@@ -122,8 +123,8 @@ class PretrainedLMForQQP:
 
         def get_batch_scores(bx, bt):
             with torch.no_grad():
-                bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=0)
-                bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1)
+                bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=0).to(self.device)
+                bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1).to(self.device)
                 outputs = self.model(bx, bt, (bx != 0))
                 logits = outputs[0].to('cpu').numpy()
                 b_scores = softmax(logits)
@@ -220,11 +221,43 @@ class PretrainedLMForQQP:
                   f'{torch.cuda.memory_allocated() / 1_000_000} MB')
 
 
+def evaluate_bert_qqp(test_dataset: str,
+                      test_questions: str,
+                      model: PretrainedLMForQQP):
+    num_questions = 0
+    num_correct_3 = 0
+    num_correct_5 = 0
+    num_correct_10 = 0
+    num_correct = 0
+
+    with open(test_questions) as f:
+        for line in tqdm(f):
+            q, dupl = line.strip().split('\t')
+            retrieved = model.retrieve(q, test_dataset)
+
+            if int(dupl) in retrieved[:10]:
+                num_correct_10 += 1
+            if int(dupl) in retrieved[:5]:
+                num_correct_5 += 1
+            if int(dupl) in retrieved[:3]:
+                num_correct_3 += 1
+            if int(dupl) in retrieved[:1]:
+                num_correct += 1
+            num_questions += 1
+
+    print(f"Detection @1: {100 * num_correct / num_questions} %")
+    print(f"Detection @3: {100 * num_correct_3 / num_questions} %")
+    print(f"Detection @5: {100 * num_correct_5 / num_questions} %")
+    print(f"Detection @10: {100 * num_correct_10 / num_questions} %")
+
+
 def main():
     t = PretrainedLMForQQP(train_path='data/quora-question-pairs/train.csv',
                            test_path='data/quora-question-pairs/test.csv')
 
-    t.train()
+    test_questions = 'data/test_questions.txt'
+    test_dataset = 'data/test_dataset.txt'
+    evaluate_bert_qqp(test_dataset, test_questions)
 
 
 if __name__ == '__main__':
