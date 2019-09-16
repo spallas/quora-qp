@@ -149,7 +149,7 @@ class PretrainedLMForQQP:
                 get_batch_scores(b_x, b_t)
         ranking = zip(range(len(scores)), scores)
         ranking = sorted(ranking, key=lambda x: x[1], reverse=True)
-        return [x[1] for x in ranking]
+        return [x[0] for x in ranking]
 
     def _log(self, step, loss, epoch_i):
         if step % self.log_interval == 0:
@@ -247,11 +247,11 @@ def evaluate_bert_qqp(test_dataset: str,
             q, dupl = line.strip().split('\t')
             retrieved = model.retrieve(q, test_dataset)
 
-            print(retrieved[:50])
-            if dupl in retrieved:
-                print(f"True, {retrieved.index(dupl)}")
-            else:
-                print(False)
+            # print(retrieved[:50])
+            # if dupl in retrieved:
+            #     print(f"True, {retrieved.index(dupl)}")
+            # else:
+            #     print(False)
 
             if int(dupl) in retrieved[:10]:
                 num_correct_10 += 1
