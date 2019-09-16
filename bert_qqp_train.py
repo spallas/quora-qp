@@ -247,6 +247,12 @@ def evaluate_bert_qqp(test_dataset: str,
             q, dupl = line.strip().split('\t')
             retrieved = model.retrieve(q, test_dataset)
 
+            print(retrieved[:50])
+            if dupl in retrieved:
+                print(f"True, {retrieved.index(dupl)}")
+            else:
+                print(False)
+
             if int(dupl) in retrieved[:10]:
                 num_correct_10 += 1
             if int(dupl) in retrieved[:5]:
@@ -265,7 +271,7 @@ def evaluate_bert_qqp(test_dataset: str,
                     print([num_questions, num_correct_3, num_correct_5, num_correct_10, num_correct],
                           file=f)
 
-                print(f"Detection @1: {100 * num_correct / num_questions} %")
+                print(f"\nDetection @1: {100 * num_correct / num_questions} %")
                 print(f"Detection @3: {100 * num_correct_3 / num_questions} %")
                 print(f"Detection @5: {100 * num_correct_5 / num_questions} %")
                 print(f"Detection @10: {100 * num_correct_10 / num_questions} %")
@@ -278,7 +284,7 @@ def main():
 
     test_questions = 'data/test_questions.txt'
     test_dataset = 'data/test_dataset.txt'
-    evaluate_bert_qqp(test_dataset, test_questions, t)
+    evaluate_bert_qqp(test_dataset, test_questions, t, 'data/cache.txt')
 
 
 if __name__ == '__main__':
