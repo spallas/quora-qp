@@ -1,6 +1,4 @@
 import os
-from typing import List
-import time
 
 import numpy as np
 import pandas as pd
@@ -123,7 +121,6 @@ class PretrainedLMForQQP:
     def retrieve(self, query: str, data_file: str = None):
 
         def get_batch_scores(bx, bt):
-            start = time.time()
             with torch.no_grad():
                 bx = nn.utils.rnn.pad_sequence(bx, batch_first=True, padding_value=0).to(self.device)
                 bt = nn.utils.rnn.pad_sequence(bt, batch_first=True, padding_value=1).to(self.device)
@@ -131,7 +128,7 @@ class PretrainedLMForQQP:
                 logits = outputs[0].to('cpu').numpy()
                 b_scores = softmax(logits)
                 scores.extend(b_scores[:, 1].tolist())
-            print(f"1 batch in time: {time.time() - start}")
+
         tok = self.train_loader.tok
         scores = []
         a = tok.encode('[CLS] ' + query + ' [SEP]')

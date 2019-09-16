@@ -2,11 +2,8 @@
 import pandas as pd
 from tqdm import tqdm
 
-from bert_qqp_train import PretrainedLMForQQP
 from question_recommend import QuestionRecommendation, TfIdfSearch, MinHashSearch
 from semantic_sim import SimServer
-import tf_sentencepiece
-
 
 TEST_QUESTIONS = 'data/test_questions.txt'
 TEST_DATASET = 'data/test_dataset.txt'
@@ -42,6 +39,40 @@ def save_test_questions():
             print(f"{q[0]}\t{q[1]}", file=f)
 
     with open(TEST_DATASET, 'w') as f:
+        for q in test_dataset:
+            print(f"{q}", file=f)
+
+
+def save_bert_questions():
+
+    df = pd.read_csv('data/quora-question-pairs/train.csv', index_col=0)
+
+    test_questions = []
+    test_dataset = []
+
+    num_test_questions = 100
+    num_dataset_questions = 10_000
+
+    for i, row in df.iterrows():
+        if row['is_duplicate'] == 1 and num_test_questions != 0:
+            test_questions.append((row['question1'],
+                                   len(test_dataset)))
+            num_test_questions -= 1
+        else:
+            test_dataset.append(row['question1'])
+            num_dataset_questions -= 1
+
+        test_dataset.append(row['question2'])
+        num_dataset_questions -= 1
+
+        if num_dataset_questions <= 0:
+            break
+
+    with open('data/bert_questions.txt', 'w') as f:
+        for q in test_questions:
+            print(f"{q[0]}\t{q[1]}", file=f)
+
+    with open('data/bert_dataset.txt', 'w') as f:
         for q in test_dataset:
             print(f"{q}", file=f)
 
