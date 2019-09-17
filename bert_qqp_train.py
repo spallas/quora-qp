@@ -60,6 +60,7 @@ class PretrainedLMForQQP:
                  is_training=True,
                  train_path='train.csv',
                  test_path='test.csv',
+                 log_dir='drive/My Drive/dm/logs/',
                  batch_size=16):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -69,6 +70,7 @@ class PretrainedLMForQQP:
         self.log_interval = 1000
         self.is_training = is_training
         self._plot_server = None
+        self.log_dir = log_dir
 
         self.checkpoint_path = checkpoint_path
         self.best_model_path = checkpoint_path + '.best'
@@ -210,7 +212,7 @@ class PretrainedLMForQQP:
 
     def _plot(self, name, value, step):
         if not self._plot_server:
-            self._plot_server = SummaryWriter(log_dir='logs')
+            self._plot_server = SummaryWriter(log_dir=self.log_dir)
         self._plot_server.add_scalar(name, value, step)
 
     @staticmethod
